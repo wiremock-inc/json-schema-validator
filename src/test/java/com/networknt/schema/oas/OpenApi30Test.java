@@ -111,4 +111,46 @@ class OpenApi30Test {
         Schema schema = factory.getSchema(schemaData);
         assertFalse(schema.validate("0", InputFormat.JSON, OutputFormat.BOOLEAN));
     }
+
+    /**
+     * A property that is {@code nullable: true} and composed via {@code allOf}
+     * referencing a named schema should accept {@code null}.
+     * <p>
+     * {@link com.networknt.schema.utils.JsonNodeTypes#equalsToSchemaType} only
+     * consults the schema that owns the failing {@code type} keyword and that
+     * schema's own parent for {@code nullable: true}. When {@code type} lives in
+     * a schema reached via {@code $ref} inside an {@code allOf}, the schema
+     * declaring {@code nullable} (the property being composed) is neither of
+     * those, so the null-friendly check never fires and validation incorrectly
+     * fails with "null found, object expected".
+     */
+    @Test
+    void nullableAllOfRef() {
+        String schemaData = "{\r\n"
+                + "  \"type\": \"object\",\r\n"
+                + "  \"required\": [\"value\"],\r\n"
+                + "  \"properties\": {\r\n"
+                + "    \"value\": {\r\n"
+                + "      \"allOf\": [ { \"$ref\": \"#/components/schemas/Money\" } ],\r\n"
+                + "      \"nullable\": true\r\n"
+                + "    }\r\n"
+                + "  },\r\n"
+                + "  \"components\": {\r\n"
+                + "    \"schemas\": {\r\n"
+                + "      \"Money\": {\r\n"
+                + "        \"type\": \"object\",\r\n"
+                + "        \"required\": [\"amount\"],\r\n"
+                + "        \"properties\": {\r\n"
+                + "          \"amount\": { \"type\": \"integer\" }\r\n"
+                + "        }\r\n"
+                + "      }\r\n"
+                + "    }\r\n"
+                + "  }\r\n"
+                + "}\r\n";
+        SchemaRegistry factory = SchemaRegistry.withDialect(Dialects.getOpenApi30());
+        Schema schema = factory.getSchema(schemaData);
+
+        List<Error> messages = schema.validate("{ \"value\": null }", InputFormat.JSON);
+        assertEquals(0, messages.size());
+    }
 }
