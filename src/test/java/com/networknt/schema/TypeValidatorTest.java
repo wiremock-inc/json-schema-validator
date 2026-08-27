@@ -186,6 +186,37 @@ class TypeValidatorTest {
     }
 
     @Test
+    void nullableAllOfRefIgnoredOutsideNullableDialect() {
+        String schemaData = """
+                {
+                  "$schema": "http://json-schema.org/draft-07/schema#",
+                  "type": "object",
+                  "required": ["value"],
+                  "properties": {
+                    "value": {
+                      "allOf": [ { "$ref": "#/definitions/Money" } ],
+                      "nullable": true
+                    }
+                  },
+                  "definitions": {
+                    "Money": {
+                      "type": "object",
+                      "required": ["amount"],
+                      "properties": {
+                        "amount": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+                """;
+        final SchemaRegistry factory = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_7);
+        final Schema validator = factory.getSchema(schemaData);
+
+        final List<Error> errors = validator.validate("{ \"value\": null }", InputFormat.JSON);
+        assertEquals(1, errors.size());
+    }
+
+    @Test
     void integerNonFinite() {
         String schemaData = "{\r\n"
                 + "  \"type\": \"integer\"\r\n"
