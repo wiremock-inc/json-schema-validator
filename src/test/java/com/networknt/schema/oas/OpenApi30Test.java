@@ -111,4 +111,36 @@ class OpenApi30Test {
         Schema schema = factory.getSchema(schemaData);
         assertFalse(schema.validate("0", InputFormat.JSON, OutputFormat.BOOLEAN));
     }
+
+    @Test
+    void nullableAllOfRef() {
+        String schemaData = """
+                {
+                  "type": "object",
+                  "required": ["value"],
+                  "properties": {
+                    "value": {
+                      "allOf": [ { "$ref": "#/components/schemas/Money" } ],
+                      "nullable": true
+                    }
+                  },
+                  "components": {
+                    "schemas": {
+                      "Money": {
+                        "type": "object",
+                        "required": ["amount"],
+                        "properties": {
+                          "amount": { "type": "integer" }
+                        }
+                      }
+                    }
+                  }
+                }
+                """;
+        SchemaRegistry factory = SchemaRegistry.withDialect(Dialects.getOpenApi30());
+        Schema schema = factory.getSchema(schemaData);
+
+        List<Error> messages = schema.validate("{ \"value\": null }", InputFormat.JSON);
+        assertEquals(0, messages.size());
+    }
 }
