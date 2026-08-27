@@ -87,6 +87,13 @@ public class JsonNodeTypes {
      * property composed using {@code allOf} containing only a {@code $ref}),
      * this walks up the dynamic evaluation stack instead, following through any
      * chain of {@code $ref} schemas.
+     * <p>
+     * A schema found this way is itself a Reference Object (its node contains
+     * {@code $ref}), and per the OpenAPI 3.0 specification any sibling
+     * properties on a Reference Object, including {@code nullable}, must be
+     * ignored. So its own node is never consulted for {@code nullable} — only
+     * its lexical parent, which is the schema actually composing it (for
+     * example the {@code allOf}-owning schema).
      *
      * @param schema the schema owning the {@code type} keyword
      * @param executionContext the execution context
@@ -94,8 +101,9 @@ public class JsonNodeTypes {
      */
     private static boolean isNullableAncestor(Schema schema, ExecutionContext executionContext) {
         Schema current = schema;
+        boolean isRefSchema = false;
         while (current != null) {
-            if (isNodeNullable(current.getSchemaNode())) {
+            if (!isRefSchema && isNodeNullable(current.getSchemaNode())) {
                 return true;
             }
             Schema parentSchema = current.getParentSchema();
@@ -103,6 +111,7 @@ public class JsonNodeTypes {
                 return true;
             }
             current = findReferencingSchema(current, executionContext);
+            isRefSchema = true;
         }
         return false;
     }

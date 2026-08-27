@@ -143,4 +143,44 @@ class OpenApi30Test {
         List<Error> messages = schema.validate("{ \"value\": null }", InputFormat.JSON);
         assertEquals(0, messages.size());
     }
+
+    /**
+     * A {@code nullable: true} declared directly alongside a {@code $ref} is a
+     * sibling property on a Reference Object, which the OpenAPI 3.0
+     * specification requires to be ignored. This must remain rejected even
+     * though {@link #nullableAllOfRef()} accepts the same {@code nullable}
+     * declared alongside an {@code allOf} that composes a {@code $ref}.
+     */
+    @Test
+    void nullableDirectRefSiblingIsIgnored() {
+        String schemaData = """
+                {
+                  "type": "object",
+                  "required": ["value"],
+                  "properties": {
+                    "value": {
+                      "$ref": "#/components/schemas/Money",
+                      "nullable": true
+                    }
+                  },
+                  "components": {
+                    "schemas": {
+                      "Money": {
+                        "type": "object",
+                        "required": ["amount"],
+                        "properties": {
+                          "amount": { "type": "integer" }
+                        }
+                      }
+                    }
+                  }
+                }
+                """;
+        SchemaRegistry factory = SchemaRegistry.withDialect(Dialects.getOpenApi30());
+        Schema schema = factory.getSchema(schemaData);
+
+        List<Error> messages = schema.validate("{ \"value\": null }", InputFormat.JSON);
+        assertEquals(1, messages.size());
+        assertEquals("type", messages.get(0).getKeyword());
+    }
 }
