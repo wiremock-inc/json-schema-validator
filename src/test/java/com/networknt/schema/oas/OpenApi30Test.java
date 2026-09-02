@@ -277,4 +277,212 @@ class OpenApi30Test {
         List<Error> messages = schema.validate("{ \"value\": null }", InputFormat.JSON);
         assertEquals(0, messages.size());
     }
+
+    @Test
+    void nullableOneOfRef() {
+        String schemaData = "{\r\n"
+                + "  \"type\": \"object\",\r\n"
+                + "  \"required\": [\"value\"],\r\n"
+                + "  \"properties\": {\r\n"
+                + "    \"value\": {\r\n"
+                + "      \"oneOf\": [ { \"$ref\": \"#/components/schemas/Money\" } ],\r\n"
+                + "      \"nullable\": true\r\n"
+                + "    }\r\n"
+                + "  },\r\n"
+                + "  \"components\": {\r\n"
+                + "    \"schemas\": {\r\n"
+                + "      \"Money\": {\r\n"
+                + "        \"type\": \"object\",\r\n"
+                + "        \"required\": [\"amount\"],\r\n"
+                + "        \"properties\": {\r\n"
+                + "          \"amount\": { \"type\": \"integer\" }\r\n"
+                + "        }\r\n"
+                + "      }\r\n"
+                + "    }\r\n"
+                + "  }\r\n"
+                + "}\r\n";
+        SchemaRegistry factory = SchemaRegistry.withDialect(Dialects.getOpenApi30());
+        Schema schema = factory.getSchema(schemaData);
+
+        List<Error> messages = schema.validate("{ \"value\": null }", InputFormat.JSON);
+        assertEquals(0, messages.size());
+    }
+
+    @Test
+    void nullableAnyOfRef() {
+        String schemaData = "{\r\n"
+                + "  \"type\": \"object\",\r\n"
+                + "  \"required\": [\"value\"],\r\n"
+                + "  \"properties\": {\r\n"
+                + "    \"value\": {\r\n"
+                + "      \"anyOf\": [ { \"$ref\": \"#/components/schemas/Money\" } ],\r\n"
+                + "      \"nullable\": true\r\n"
+                + "    }\r\n"
+                + "  },\r\n"
+                + "  \"components\": {\r\n"
+                + "    \"schemas\": {\r\n"
+                + "      \"Money\": {\r\n"
+                + "        \"type\": \"object\",\r\n"
+                + "        \"required\": [\"amount\"],\r\n"
+                + "        \"properties\": {\r\n"
+                + "          \"amount\": { \"type\": \"integer\" }\r\n"
+                + "        }\r\n"
+                + "      }\r\n"
+                + "    }\r\n"
+                + "  }\r\n"
+                + "}\r\n";
+        SchemaRegistry factory = SchemaRegistry.withDialect(Dialects.getOpenApi30());
+        Schema schema = factory.getSchema(schemaData);
+
+        List<Error> messages = schema.validate("{ \"value\": null }", InputFormat.JSON);
+        assertEquals(0, messages.size());
+    }
+
+    @Test
+    void nullableNotDoesNotPropagateThroughNot() {
+        String schemaData = "{\r\n"
+                + "  \"type\": \"object\",\r\n"
+                + "  \"required\": [\"value\"],\r\n"
+                + "  \"properties\": {\r\n"
+                + "    \"value\": {\r\n"
+                + "      \"not\": { \"$ref\": \"#/components/schemas/Impossible\" },\r\n"
+                + "      \"nullable\": true\r\n"
+                + "    }\r\n"
+                + "  },\r\n"
+                + "  \"components\": {\r\n"
+                + "    \"schemas\": {\r\n"
+                + "      \"Impossible\": { \"type\": \"string\" }\r\n"
+                + "    }\r\n"
+                + "  }\r\n"
+                + "}\r\n";
+        SchemaRegistry factory = SchemaRegistry.withDialect(Dialects.getOpenApi30());
+        Schema schema = factory.getSchema(schemaData);
+
+        List<Error> messages = schema.validate("{ \"value\": null }", InputFormat.JSON);
+        assertEquals(0, messages.size());
+    }
+
+    @Test
+    void nullableContainerNotLeakedIntoRefItem() {
+        String schemaData = "{\r\n"
+                + "  \"type\": \"object\",\r\n"
+                + "  \"properties\": {\r\n"
+                + "    \"list\": {\r\n"
+                + "      \"nullable\": true,\r\n"
+                + "      \"type\": \"array\",\r\n"
+                + "      \"items\": { \"$ref\": \"#/components/schemas/Money\" }\r\n"
+                + "    }\r\n"
+                + "  },\r\n"
+                + "  \"components\": {\r\n"
+                + "    \"schemas\": {\r\n"
+                + "      \"Money\": {\r\n"
+                + "        \"type\": \"object\",\r\n"
+                + "        \"required\": [\"amount\"],\r\n"
+                + "        \"properties\": {\r\n"
+                + "          \"amount\": { \"type\": \"integer\" }\r\n"
+                + "        }\r\n"
+                + "      }\r\n"
+                + "    }\r\n"
+                + "  }\r\n"
+                + "}\r\n";
+        SchemaRegistry factory = SchemaRegistry.withDialect(Dialects.getOpenApi30());
+        Schema schema = factory.getSchema(schemaData);
+
+        List<Error> messages = schema.validate("{ \"list\": [ null ] }", InputFormat.JSON);
+        assertEquals(1, messages.size());
+        assertEquals("type", messages.get(0).getKeyword());
+    }
+
+    @Test
+    void nullableContainerNotLeakedIntoRefAdditionalProperties() {
+        String schemaData = "{\r\n"
+                + "  \"type\": \"object\",\r\n"
+                + "  \"properties\": {\r\n"
+                + "    \"meta\": {\r\n"
+                + "      \"nullable\": true,\r\n"
+                + "      \"type\": \"object\",\r\n"
+                + "      \"additionalProperties\": { \"$ref\": \"#/components/schemas/Money\" }\r\n"
+                + "    }\r\n"
+                + "  },\r\n"
+                + "  \"components\": {\r\n"
+                + "    \"schemas\": {\r\n"
+                + "      \"Money\": {\r\n"
+                + "        \"type\": \"object\",\r\n"
+                + "        \"required\": [\"amount\"],\r\n"
+                + "        \"properties\": {\r\n"
+                + "          \"amount\": { \"type\": \"integer\" }\r\n"
+                + "        }\r\n"
+                + "      }\r\n"
+                + "    }\r\n"
+                + "  }\r\n"
+                + "}\r\n";
+        SchemaRegistry factory = SchemaRegistry.withDialect(Dialects.getOpenApi30());
+        Schema schema = factory.getSchema(schemaData);
+
+        List<Error> messages = schema.validate("{ \"meta\": { \"extra\": null } }", InputFormat.JSON);
+        assertEquals(1, messages.size());
+        assertEquals("type", messages.get(0).getKeyword());
+    }
+
+    @Test
+    void nullableAdditionalPropertiesDoNotNotLeakedWhenPropertyNamedAllOf() {
+        String schemaData = "{\r\n"
+                + "  \"type\": \"object\",\r\n"
+                + "  \"properties\": {\r\n"
+                + "    \"allOf\": {\r\n"
+                + "      \"nullable\": true,\r\n"
+                + "      \"type\": \"object\",\r\n"
+                + "      \"additionalProperties\": { \"$ref\": \"#/components/schemas/Money\" }\r\n"
+                + "    }\r\n"
+                + "  },\r\n"
+                + "  \"components\": {\r\n"
+                + "    \"schemas\": {\r\n"
+                + "      \"Money\": {\r\n"
+                + "        \"type\": \"object\",\r\n"
+                + "        \"required\": [\"amount\"],\r\n"
+                + "        \"properties\": {\r\n"
+                + "          \"amount\": { \"type\": \"integer\" }\r\n"
+                + "        }\r\n"
+                + "      }\r\n"
+                + "    }\r\n"
+                + "  }\r\n"
+                + "}\r\n";
+        SchemaRegistry factory = SchemaRegistry.withDialect(Dialects.getOpenApi30());
+        Schema schema = factory.getSchema(schemaData);
+
+        List<Error> messages = schema.validate("{ \"allOf\": { \"extra\": null } }", InputFormat.JSON);
+        assertEquals(1, messages.size());
+        assertEquals("type", messages.get(0).getKeyword());
+    }
+
+    @Test
+    void nullableItemsNotLeakedWhenPropertyNamedAllOf() {
+        String schemaData = "{\r\n"
+                + "  \"type\": \"object\",\r\n"
+                + "  \"properties\": {\r\n"
+                + "    \"allOf\": {\r\n"
+                + "      \"nullable\": true,\r\n"
+                + "      \"type\": \"array\",\r\n"
+                + "      \"items\": { \"$ref\": \"#/components/schemas/Money\" }\r\n"
+                + "    }\r\n"
+                + "  },\r\n"
+                + "  \"components\": {\r\n"
+                + "    \"schemas\": {\r\n"
+                + "      \"Money\": {\r\n"
+                + "        \"type\": \"object\",\r\n"
+                + "        \"required\": [\"amount\"],\r\n"
+                + "        \"properties\": {\r\n"
+                + "          \"amount\": { \"type\": \"integer\" }\r\n"
+                + "        }\r\n"
+                + "      }\r\n"
+                + "    }\r\n"
+                + "  }\r\n"
+                + "}\r\n";
+        SchemaRegistry factory = SchemaRegistry.withDialect(Dialects.getOpenApi30());
+        Schema schema = factory.getSchema(schemaData);
+
+        List<Error> messages = schema.validate("{ \"allOf\": [ null ] }", InputFormat.JSON);
+        assertEquals(1, messages.size());
+        assertEquals("type", messages.get(0).getKeyword());
+    }
 }

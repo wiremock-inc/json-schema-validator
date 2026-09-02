@@ -28,9 +28,13 @@ public class JsonNodeTypes {
      * contents of a distinct nested value. Only a {@code nullable} declared on
      * a schema reached via one of these keywords describes the same value as
      * the schema being validated.
+     * <p>
+     * {@code not} is deliberately excluded: {@code not: {$ref: X}} means the
+     * value must NOT match {@code X}, not that {@code X} also describes this
+     * value, so there is no basis for propagating {@code nullable} through it.
      */
     private static final Set<String> COMPOSING_KEYWORDS = new HashSet<>(
-            Arrays.asList("allOf", "oneOf", "anyOf", "not"));
+            Arrays.asList("allOf", "oneOf", "anyOf"));
 
     public static boolean isNodeNullable(JsonNode schema) {
         JsonNode nullable = schema.get(NULLABLE);
@@ -142,21 +146,31 @@ public class JsonNodeTypes {
     /**
      * Determines if the given schema was reached from its lexical parent via a
      * keyword that composes the parent (e.g. {@code allOf}/{@code oneOf}/
-     * {@code anyOf}/{@code not}), as opposed to one that merely contains it as
-     * a distinct nested value (e.g. {@code properties}/{@code items}/
+     * {@code anyOf}), as opposed to one that merely contains it as a distinct
+     * nested value (e.g. {@code properties}/{@code items}/
      * {@code additionalProperties}). This is read from the schema's own
      * location, since the keyword name is not otherwise recorded on the
      * lexical parent link.
+     * <p>
+     * A composing keyword's array items are appended after the keyword name
+     * (e.g. {@code .../value/allOf/0}), so the keyword itself is the second
+     * to last element. A single-schema keyword like {@code additionalProperties}
+     * has no such index — its sub-schema's location ends directly in the
+     * keyword name (e.g. {@code .../order/additionalProperties}) — so the last
+     * element must be checked instead. Which case applies is told apart by
+     * whether the last element is an array index (a number) or a name.
      *
      * @param schema the schema to check
      * @return true if the schema was reached via a composing keyword
      */
     private static boolean isComposingKeyword(Schema schema) {
-        NodePath parent = schema.getSchemaLocation().getFragment().getParent();
-        if (parent == null) {
+        NodePath fragment = schema.getSchemaLocation().getFragment();
+        Object lastElement = fragment.getElement(-1);
+        NodePath keywordPath = lastElement instanceof Number ? fragment.getParent() : fragment;
+        if (keywordPath == null) {
             return false;
         }
-        Object keyword = parent.getElement(-1);
+        Object keyword = keywordPath.getElement(-1);
         return keyword != null && COMPOSING_KEYWORDS.contains(keyword.toString());
     }
 
