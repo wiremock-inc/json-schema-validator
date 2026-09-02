@@ -22,16 +22,9 @@ public class JsonNodeTypes {
     private static final String NULLABLE = "nullable";
 
     /**
-     * Keywords whose sub-schemas compose the schema declaring them, as opposed
-     * to keywords like {@code properties}/{@code items}/
-     * {@code additionalProperties} whose sub-schemas merely describe the
-     * contents of a distinct nested value. Only a {@code nullable} declared on
-     * a schema reached via one of these keywords describes the same value as
-     * the schema being validated.
-     * <p>
-     * {@code not} is deliberately excluded: {@code not: {$ref: X}} means the
-     * value must NOT match {@code X}, not that {@code X} also describes this
-     * value, so there is no basis for propagating {@code nullable} through it.
+     * Keywords whose sub-schemas describe the same value as their parent,
+     * unlike {@code properties}/{@code items}/{@code additionalProperties}.
+     * {@code not} is excluded since it negates rather than describes.
      */
     private static final Set<String> COMPOSING_KEYWORDS = new HashSet<>(
             Arrays.asList("allOf", "oneOf", "anyOf"));
@@ -92,30 +85,8 @@ public class JsonNodeTypes {
 
     /**
      * Determines if the schema owning the failing {@code type} keyword is
-     * nullable, either directly or via a chain of schemas that compose it.
-     * <p>
-     * A schema's lexical parent ({@link Schema#getParentSchema()}) is set the
-     * same way regardless of whether it was reached via a composing keyword
-     * (e.g. an {@code allOf} array item, which describes the same value as its
-     * parent) or a containing keyword (e.g. a {@code properties} entry, which
-     * describes a distinct nested value) — so the parent's {@code nullable}
-     * must only be trusted, and the walk only continued through it, when the
-     * connecting keyword is a composing one. This is determined structurally
-     * from the schema's own {@link Schema#getSchemaLocation()}, since a
-     * {@code $ref} resolves to a schema that may be shared across many
-     * reference sites and so does not carry this information itself.
-     * <p>
-     * A schema resolved through {@code $ref} is additionally a cached object
-     * shared across every site that references it, so its lexical parent
-     * reflects where it is declared in the document rather than where it was
-     * referenced from. To find a {@code nullable: true} declared on the
-     * referencing schema instead, this also follows through the dynamic
-     * evaluation stack to the schema holding the {@code $ref}, continuing the
-     * same composing-keyword walk from there. A schema reached this way is
-     * itself a Reference Object (its node contains {@code $ref}), and per the
-     * OpenAPI 3.0 specification any sibling properties on a Reference Object,
-     * including {@code nullable}, must be ignored, so its own node is never
-     * consulted — only whether it was itself reached via a composing keyword.
+     * nullable, walking up through composing keywords and {@code $ref} hops
+     * that describe the same value, in either order and to any depth.
      *
      * @param schema the schema owning the {@code type} keyword
      * @param executionContext the execution context
@@ -145,20 +116,10 @@ public class JsonNodeTypes {
 
     /**
      * Determines if the given schema was reached from its lexical parent via a
-     * keyword that composes the parent (e.g. {@code allOf}/{@code oneOf}/
-     * {@code anyOf}), as opposed to one that merely contains it as a distinct
-     * nested value (e.g. {@code properties}/{@code items}/
-     * {@code additionalProperties}). This is read from the schema's own
-     * location, since the keyword name is not otherwise recorded on the
-     * lexical parent link.
-     * <p>
-     * A composing keyword's array items are appended after the keyword name
-     * (e.g. {@code .../value/allOf/0}), so the keyword itself is the second
-     * to last element. A single-schema keyword like {@code additionalProperties}
-     * has no such index — its sub-schema's location ends directly in the
-     * keyword name (e.g. {@code .../order/additionalProperties}) — so the last
-     * element must be checked instead. Which case applies is told apart by
-     * whether the last element is an array index (a number) or a name.
+     * {@link #COMPOSING_KEYWORDS composing keyword}. Array-based keywords
+     * (e.g. {@code allOf}) append an index after the keyword name, so it's the
+     * second to last path element; single-schema keywords have no index, so
+     * the keyword name is the last element itself.
      *
      * @param schema the schema to check
      * @return true if the schema was reached via a composing keyword
