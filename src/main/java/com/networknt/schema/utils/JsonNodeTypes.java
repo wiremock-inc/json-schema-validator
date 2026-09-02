@@ -1,6 +1,9 @@
 package com.networknt.schema.utils;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Set;
 
 import tools.jackson.databind.JsonNode;
 import com.networknt.schema.ExecutionContext;
@@ -8,6 +11,7 @@ import com.networknt.schema.Schema;
 import com.networknt.schema.SchemaContext;
 import com.networknt.schema.SchemaRegistryConfig;
 import com.networknt.schema.SpecificationVersion;
+import com.networknt.schema.path.NodePath;
 
 public class JsonNodeTypes {
     private static final long V6_VALUE = SpecificationVersion.DRAFT_6.getOrder();
@@ -16,6 +20,14 @@ public class JsonNodeTypes {
     private static final String ENUM = "enum";
     private static final String REF = "$ref";
     private static final String NULLABLE = "nullable";
+
+    /**
+     * Keywords whose sub-schemas describe the same value as their parent,
+     * unlike {@code properties}/{@code items}/{@code additionalProperties}.
+     * {@code not} is excluded since it negates rather than describes.
+     */
+    private static final Set<String> COMPOSING_KEYWORDS = new HashSet<>(
+            Arrays.asList("allOf", "oneOf", "anyOf"));
 
     public static boolean isNodeNullable(JsonNode schema){
         JsonNode nullable = schema.get(NULLABLE);
@@ -76,24 +88,8 @@ public class JsonNodeTypes {
 
     /**
      * Determines if the schema owning the failing {@code type} keyword is
-     * nullable, either directly, via its lexical parent, or via a schema that
-     * referenced it through {@code $ref}.
-     * <p>
-     * A schema resolved through {@code $ref} is cached and shared across every
-     * site that references it, so its lexical parent (obtained through
-     * {@link Schema#getParentSchema()}) reflects where it is declared in the
-     * document rather than where it was referenced from. To find a
-     * {@code nullable: true} declared on the referencing schema (for example a
-     * property composed using {@code allOf} containing only a {@code $ref}),
-     * this walks up the dynamic evaluation stack instead, following through any
-     * chain of {@code $ref} schemas.
-     * <p>
-     * A schema found this way is itself a Reference Object (its node contains
-     * {@code $ref}), and per the OpenAPI 3.0 specification any sibling
-     * properties on a Reference Object, including {@code nullable}, must be
-     * ignored. So its own node is never consulted for {@code nullable} — only
-     * its lexical parent, which is the schema actually composing it (for
-     * example the {@code allOf}-owning schema).
+     * nullable, walking up through composing keywords and {@code $ref} hops
+     * that describe the same value, in either order and to any depth.
      *
      * @param schema the schema owning the {@code type} keyword
      * @param executionContext the execution context
@@ -107,13 +103,39 @@ public class JsonNodeTypes {
                 return true;
             }
             Schema parentSchema = current.getParentSchema();
-            if (parentSchema != null && isNodeNullable(parentSchema.getSchemaNode())) {
-                return true;
+            if (parentSchema != null && isComposingKeyword(current)) {
+                if (isNodeNullable(parentSchema.getSchemaNode())) {
+                    return true;
+                }
+                current = parentSchema;
+                isRefSchema = false;
+                continue;
             }
             current = findReferencingSchema(current, executionContext);
             isRefSchema = true;
         }
         return false;
+    }
+
+    /**
+     * Determines if the given schema was reached from its lexical parent via a
+     * {@link #COMPOSING_KEYWORDS composing keyword}. Array-based keywords
+     * (e.g. {@code allOf}) append an index after the keyword name, so it's the
+     * second to last path element; single-schema keywords have no index, so
+     * the keyword name is the last element itself.
+     *
+     * @param schema the schema to check
+     * @return true if the schema was reached via a composing keyword
+     */
+    private static boolean isComposingKeyword(Schema schema) {
+        NodePath fragment = schema.getSchemaLocation().getFragment();
+        Object lastElement = fragment.getElement(-1);
+        NodePath keywordPath = lastElement instanceof Number ? fragment.getParent() : fragment;
+        if (keywordPath == null) {
+            return false;
+        }
+        Object keyword = keywordPath.getElement(-1);
+        return keyword != null && COMPOSING_KEYWORDS.contains(keyword.toString());
     }
 
     /**
