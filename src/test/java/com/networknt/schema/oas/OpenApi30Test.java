@@ -112,18 +112,6 @@ class OpenApi30Test {
         assertFalse(schema.validate("0", InputFormat.JSON, OutputFormat.BOOLEAN));
     }
 
-    /**
-     * A property that is {@code nullable: true} and composed via {@code allOf}
-     * referencing a named schema should accept {@code null}.
-     * <p>
-     * {@link com.networknt.schema.utils.JsonNodeTypes#equalsToSchemaType} only
-     * consults the schema that owns the failing {@code type} keyword and that
-     * schema's own parent for {@code nullable: true}. When {@code type} lives in
-     * a schema reached via {@code $ref} inside an {@code allOf}, the schema
-     * declaring {@code nullable} (the property being composed) is neither of
-     * those, so the null-friendly check never fires and validation incorrectly
-     * fails with "null found, object expected".
-     */
     @Test
     void nullableAllOfRef() {
         String schemaData = "{\r\n"
@@ -154,13 +142,6 @@ class OpenApi30Test {
         assertEquals(0, messages.size());
     }
 
-    /**
-     * A {@code nullable: true} declared directly alongside a {@code $ref} is a
-     * sibling property on a Reference Object, which the OpenAPI 3.0
-     * specification requires to be ignored. This must remain rejected even
-     * though {@link #nullableAllOfRef()} accepts the same {@code nullable}
-     * declared alongside an {@code allOf} that composes a {@code $ref}.
-     */
     @Test
     void nullableDirectRefSiblingIsIgnored() {
         String schemaData = "{\r\n"
@@ -190,5 +171,110 @@ class OpenApi30Test {
         List<Error> messages = schema.validate("{ \"value\": null }", InputFormat.JSON);
         assertEquals(1, messages.size());
         assertEquals("type", messages.get(0).getKeyword());
+    }
+
+    @Test
+    void nullableContainerNotLeakedIntoRefProperty() {
+        String schemaData = "{\r\n"
+                + "  \"type\": \"object\",\r\n"
+                + "  \"properties\": {\r\n"
+                + "    \"order\": {\r\n"
+                + "      \"nullable\": true,\r\n"
+                + "      \"type\": \"object\",\r\n"
+                + "      \"required\": [\"customer\"],\r\n"
+                + "      \"properties\": {\r\n"
+                + "        \"customer\": { \"$ref\": \"#/components/schemas/Customer\" }\r\n"
+                + "      }\r\n"
+                + "    }\r\n"
+                + "  },\r\n"
+                + "  \"components\": {\r\n"
+                + "    \"schemas\": {\r\n"
+                + "      \"Customer\": {\r\n"
+                + "        \"type\": \"object\",\r\n"
+                + "        \"required\": [\"name\"],\r\n"
+                + "        \"properties\": {\r\n"
+                + "          \"name\": { \"type\": \"string\" }\r\n"
+                + "        }\r\n"
+                + "      }\r\n"
+                + "    }\r\n"
+                + "  }\r\n"
+                + "}\r\n";
+        SchemaRegistry factory = SchemaRegistry.withDialect(Dialects.getOpenApi30());
+        Schema schema = factory.getSchema(schemaData);
+
+        List<Error> messages = schema.validate("{ \"order\": { \"customer\": null } }", InputFormat.JSON);
+        assertEquals(1, messages.size());
+        assertEquals("type", messages.get(0).getKeyword());
+    }
+
+    @Test
+    void nullableAllOfRefWithTwoLevelsOfComposingDepth() {
+        String schemaData = "{\r\n"
+                + "  \"type\": \"object\",\r\n"
+                + "  \"required\": [\"value\"],\r\n"
+                + "  \"properties\": {\r\n"
+                + "    \"value\": {\r\n"
+                + "      \"allOf\": [ { \"$ref\": \"#/components/schemas/Money\" } ],\r\n"
+                + "      \"nullable\": true\r\n"
+                + "    }\r\n"
+                + "  },\r\n"
+                + "  \"components\": {\r\n"
+                + "    \"schemas\": {\r\n"
+                + "      \"Money\": {\r\n"
+                + "        \"allOf\": [\r\n"
+                + "          {\r\n"
+                + "            \"allOf\": [\r\n"
+                + "              {\r\n"
+                + "                \"type\": \"object\",\r\n"
+                + "                \"required\": [\"amount\"],\r\n"
+                + "                \"properties\": {\r\n"
+                + "                  \"amount\": { \"type\": \"integer\" }\r\n"
+                + "                }\r\n"
+                + "              }\r\n"
+                + "            ]\r\n"
+                + "          }\r\n"
+                + "        ]\r\n"
+                + "      }\r\n"
+                + "    }\r\n"
+                + "  }\r\n"
+                + "}\r\n";
+        SchemaRegistry factory = SchemaRegistry.withDialect(Dialects.getOpenApi30());
+        Schema schema = factory.getSchema(schemaData);
+
+        List<Error> messages = schema.validate("{ \"value\": null }", InputFormat.JSON);
+        assertEquals(0, messages.size());
+    }
+
+    @Test
+    void nullableAllOfRefWithTwoLevelsOfReferenceDepth() {
+        String schemaData = "{\r\n"
+                + "  \"type\": \"object\",\r\n"
+                + "  \"required\": [\"value\"],\r\n"
+                + "  \"properties\": {\r\n"
+                + "    \"value\": {\r\n"
+                + "      \"allOf\": [ { \"$ref\": \"#/components/schemas/Money\" } ],\r\n"
+                + "      \"nullable\": true\r\n"
+                + "    }\r\n"
+                + "  },\r\n"
+                + "  \"components\": {\r\n"
+                + "    \"schemas\": {\r\n"
+                + "      \"Money\": {\r\n"
+                + "        \"allOf\": [ { \"$ref\": \"#/components/schemas/Amount\" } ]\r\n"
+                + "      },\r\n"
+                + "      \"Amount\": {\r\n"
+                + "        \"type\": \"object\",\r\n"
+                + "        \"required\": [\"amount\"],\r\n"
+                + "        \"properties\": {\r\n"
+                + "          \"amount\": { \"type\": \"integer\" }\r\n"
+                + "        }\r\n"
+                + "      }\r\n"
+                + "    }\r\n"
+                + "  }\r\n"
+                + "}\r\n";
+        SchemaRegistry factory = SchemaRegistry.withDialect(Dialects.getOpenApi30());
+        Schema schema = factory.getSchema(schemaData);
+
+        List<Error> messages = schema.validate("{ \"value\": null }", InputFormat.JSON);
+        assertEquals(0, messages.size());
     }
 }
